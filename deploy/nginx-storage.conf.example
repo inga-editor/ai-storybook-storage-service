@@ -30,7 +30,10 @@ server {
         tcp_nopush on;
         add_header Cache-Control "public, max-age=31536000, immutable" always;
         add_header X-Content-Type-Options nosniff always;
-        add_header Access-Control-Allow-Origin "$http_origin" always;   # or pin to editor/player origins
+        # Wildcard is correct here: public immutable cookie-less media (CDN semantics).
+        # Do NOT echo $http_origin — cached responses would pin one origin's header
+        # once a CDN/proxy sits in front (needs Vary: Origin, which kills hit rate).
+        add_header Access-Control-Allow-Origin "*" always;
         add_header Access-Control-Allow-Methods "GET, HEAD" always;
         # Range / ETag / Last-Modified / 304 are nginx defaults — nothing to add.
         # Content-Type resolved from extension via mime.types (keys always carry an ext).
