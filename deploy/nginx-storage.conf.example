@@ -28,7 +28,11 @@ server {
         alias {STORAGE_ROOT}/;         # trailing slash: alias points at the dir holding the BUCKET dirs
         sendfile on;
         tcp_nopush on;
-        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        # NO `always` here: with `always` the 1-year immutable header attaches to
+        # 403/404 too, and a CDN in front (Cloudflare) then caches the ERROR for a
+        # year (live incident 260813 — a pre-fix 403 kept serving from CF cache).
+        # Without `always`, nginx adds it only on 2xx/3xx.
+        add_header Cache-Control "public, max-age=31536000, immutable";
         add_header X-Content-Type-Options nosniff always;
         # Wildcard is correct here: public immutable cookie-less media (CDN semantics).
         # Do NOT echo $http_origin — cached responses would pin one origin's header
