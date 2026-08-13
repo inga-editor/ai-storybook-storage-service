@@ -79,3 +79,16 @@ async def test_broken_token():
     with pytest.raises(ServiceError) as ei:
         await user_jwt.require_user_jwt(credentials=_creds("not.a.jwt"))
     assert ei.value.code == "UNAUTHORIZED"
+
+
+async def test_jwks_infra_error_is_401_not_500(monkeypatch):
+    # PyJWKClientError is a PyJWTError but NOT an InvalidTokenError — it must still
+    # map to the UNAUTHORIZED envelope (live bug: ES256 without `cryptography`
+    # escaped as a 500 traceback).
+    async def _boom(token):
+        raise jwt.exceptions.PyJWKClientError("jwks fetch failed")
+
+    monkeypatch.setattr(user_jwt, "_decode", _boom)
+    with pytest.raises(ServiceError) as ei:
+        await user_jwt.require_user_jwt(credentials=_creds(_mint()))
+    assert ei.value.code == "UNAUTHORIZED"

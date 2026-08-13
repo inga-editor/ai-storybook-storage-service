@@ -72,6 +72,13 @@ async def authenticate_token(token: str) -> Principal:
     try:
         claims = await _decode(token)
     except jwt.InvalidTokenError:
+        raise unauthorized()  # normal bad token — silent, no oracle
+    except jwt.PyJWTError as exc:
+        # Infra-side verify failure (JWKS fetch/parse, missing crypto backend…) —
+        # still fail-closed on the single UNAUTHORIZED envelope, but LOG it: unlike
+        # a bad token this needs ops attention, and without the log it would
+        # masquerade as a client error.
+        logger.warning("jwt_verify_infra_error", extra={"data": {"error": type(exc).__name__}})
         raise unauthorized()
     sub = claims.get("sub")
     if not sub:

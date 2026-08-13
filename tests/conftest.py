@@ -16,6 +16,10 @@ os.environ.setdefault("STORAGE_API_KEYS", '{"image-api":"test-key","ops":"test-o
 os.environ.setdefault("SUPABASE_JWT_SECRET", "test-jwt-secret-0123456789abcdefghij")
 os.environ.setdefault("STORAGE_BUCKETS", "storybook-assets")
 os.environ.setdefault("SUPABASE_URL", "")
+# Pin write-policy envs to the CODE defaults — a developer's local `.env` (read by
+# pydantic-settings) must not leak its tuned values into assertions.
+os.environ.setdefault("STORAGE_SERVICE_ONLY_PREFIXES", "exports/")
+os.environ.setdefault("STORAGE_USER_MIME_CAPS", '{"image/": 10485760, "audio/": 20971520, "video/": 52428800}')
 
 import asyncio  # noqa: E402
 import time  # noqa: E402
