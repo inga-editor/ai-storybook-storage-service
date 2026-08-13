@@ -1,0 +1,72 @@
+# nginx config for the Storybook Storage Service (ADR-054 / design 05).
+# Replace {STORAGE_ROOT} and storage.{domain}; wire TLS via your usual cert block.
+#
+# EXPOSURE MATRIX (design 04 §1) — this file is a SECURITY boundary:
+#   PUBLIC : GET /files/…, GET /files-signed/…, POST /api/storage/uploads, DELETE (user)
+#   NEVER EXPOSED (loopback-only): PUT/HEAD /api/storage/objects/…, POST /api/storage/sign
+# There is deliberately NO location for `PUT /api/storage/objects` or `/api/storage/sign`
+# — those are S2S (X-API-Key) and must only be reachable on 127.0.0.1:8200. Verify from
+# an external host: `curl -X PUT https://storage.{domain}/api/storage/objects/storybook-assets/x.png`
+# MUST return 404 from nginx (no location), NOT 401 from FastAPI.
+
+server {
+    listen 80;
+    server_name storage.example.com;   # storage.{domain} — dedicated subdomain isolates origin (XSS via upload)
+
+    gzip off;                          # media already compressed
+    access_log /var/log/nginx/storage-access.log;
+
+    # --- Block private prefixes on the public read path (sync with STORAGE_PRIVATE_PREFIXES) ---
+    # MUST come BEFORE `location /files/`. Add one line per private prefix.
+    location ^~ /files/storybook-assets/exports/ { return 403; }
+
+    # --- Never serve the sidecar / staging trees ---
+    location ~ /\.(meta|tmp)/ { deny all; }
+
+    # --- Public read: zero-copy sendfile straight from disk ---
+    location /files/ {
+        alias {STORAGE_ROOT}/;         # trailing slash: alias points at the dir holding the BUCKET dirs
+        sendfile on;
+        tcp_nopush on;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        add_header X-Content-Type-Options nosniff always;
+        add_header Access-Control-Allow-Origin "$http_origin" always;   # or pin to editor/player origins
+        add_header Access-Control-Allow-Methods "GET, HEAD" always;
+        # Range / ETag / Last-Modified / 304 are nginx defaults — nothing to add.
+        # Content-Type resolved from extension via mime.types (keys always carry an ext).
+        default_type application/octet-stream;
+    }
+
+    # --- Internal target for X-Accel-Redirect from signed GET (NOT directly reachable) ---
+    location /internal-files/ {
+        internal;
+        alias {STORAGE_ROOT}/;
+        add_header Cache-Control "private, no-store" always;
+    }
+
+    # --- Signed GET: proxy to FastAPI, which verifies HMAC then X-Accel-Redirects ---
+    location /files-signed/ {
+        proxy_pass http://127.0.0.1:8200;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $remote_addr;
+    }
+
+    # --- User-facing write routes (user JWT), proxied to loopback FastAPI ---
+    location = /api/storage/uploads {
+        proxy_pass http://127.0.0.1:8200;
+        proxy_request_buffering off;        # stream large multipart bodies through
+        client_max_body_size 60m;           # slightly above the largest class limit (50MB)
+        proxy_set_header Host $host;
+        proxy_set_header Authorization $http_authorization;
+    }
+    # DELETE (user mode) shares the objects path; user JWT is enforced by FastAPI.
+    # Only the DELETE method is proxied — PUT/HEAD stay loopback-only.
+    location ~ ^/api/storage/objects/ {
+        limit_except DELETE { deny all; }   # PUT/HEAD are S2S → refuse at the edge
+        proxy_pass http://127.0.0.1:8200;
+        proxy_set_header Host $host;
+        proxy_set_header Authorization $http_authorization;
+    }
+
+    # NOTE: NO `location ... /api/storage/sign` and NO PUT/HEAD passthrough — intentional.
+}

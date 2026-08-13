@@ -1,0 +1,27 @@
+"""DELETE /api/storage/objects/{bucket}/{key:path} — best-effort, ALWAYS 200.
+
+S2S may delete any key; user JWT only within the FE-writable allowlist. Never 404
+(parity `delete_object` swallowing missing keys — compensation flows must not fail).
+"""
+
+from __future__ import annotations
+
+from fastapi import Depends
+
+from src.auth.combined import require_api_key_or_user_jwt
+from src.auth.principal import Principal
+from src.drivers.registry import get_driver
+from src.validation import key_grammar
+from src.validation.prefix_policy import check_fe_writable
+
+
+async def delete_object(
+    bucket: str,
+    key: str,
+    principal: Principal = Depends(require_api_key_or_user_jwt),
+) -> dict:
+    key_grammar.validate(bucket, key)
+    if principal.kind == "user":
+        check_fe_writable(key)  # 403 outside allowlist
+    deleted = await get_driver().delete(bucket, key)
+    return {"success": True, "data": {"deleted": deleted}}

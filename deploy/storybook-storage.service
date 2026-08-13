@@ -1,0 +1,25 @@
+[Unit]
+Description=Storybook Storage Service (ADR-054, FastAPI, port 8200)
+After=network.target
+
+[Service]
+Type=exec
+# Dedicated unprivileged user that owns STORAGE_ROOT.
+User=storybook-storage
+Group=storybook-storage
+WorkingDirectory=/opt/storybook-storage-service
+EnvironmentFile=/opt/storybook-storage-service/.env
+ExecStart=/opt/storybook-storage-service/scripts/run-service.sh
+Restart=always
+RestartSec=2
+
+# --- Hardening ---
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+# Only the storage volume is writable.
+ReadWritePaths=/var/lib/storybook-storage
+
+[Install]
+WantedBy=multi-user.target
