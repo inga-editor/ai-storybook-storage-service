@@ -87,9 +87,17 @@ class Settings(BaseSettings):
 
     # --- Buckets / prefixes / caps ------------------------------------------
     storage_buckets: str = "storybook-assets"          # CSV or JSON list
-    storage_private_prefixes: str = "exports/"         # CSV list (signed-GET only)
+    storage_private_prefixes: str = "exports/"         # CSV list (READ privacy: signed-GET only)
+    # WRITE restriction (orthogonal to the READ list above): user-JWT write/delete
+    # into these prefixes -> 403; S2S is unaffected. Extend in prod with every
+    # service-written tree (ai-logs/, illustrations/, ...) — env change, no deploy.
+    storage_service_only_prefixes: str = "exports/"    # CSV or JSON list
     storage_max_object_bytes: int = 52428800           # 50MB default S2S cap
     storage_prefix_size_caps: str = '{"videos/": 3221225472}'  # JSON map prefix->cap
+    # User-upload mime policy: JSON map mime-prefix -> byte cap. FAIL-CLOSED — a
+    # mime with no matching entry -> 415 (keeps text/html, image/svg+xml off the
+    # public read domain by default). New FE media type = one env entry.
+    storage_user_mime_caps: str = '{"image/": 10485760, "audio/": 20971520, "video/": 52428800}'
     storage_min_free_bytes: int = 10737418240          # 10GB -> healthz degraded
 
     # --- Signed GET dev fallback --------------------------------------------
@@ -115,6 +123,14 @@ class Settings(BaseSettings):
     @cached_property
     def private_prefixes(self) -> list[str]:
         return _parse_json_or_csv_list(self.storage_private_prefixes)
+
+    @cached_property
+    def service_only_prefixes(self) -> list[str]:
+        return _parse_json_or_csv_list(self.storage_service_only_prefixes)
+
+    @cached_property
+    def user_mime_caps(self) -> dict[str, int]:
+        return _parse_json_int_map(self.storage_user_mime_caps)
 
     @cached_property
     def prefix_size_caps(self) -> dict[str, int]:

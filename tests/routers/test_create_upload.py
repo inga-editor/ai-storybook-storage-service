@@ -18,20 +18,26 @@ def test_upload_happy_201(client, fake_driver, user_jwt):
     assert "/files/storybook-assets/" in r.json()["data"]["url"]
 
 
-def test_upload_system_prefix_403(client, fake_driver, user_jwt):
-    r = _post(client, user_jwt(), "ai-logs/x.png")
+def test_upload_service_only_prefix_403(client, fake_driver, user_jwt):
+    r = _post(client, user_jwt(), "exports/x.png")
     assert r.status_code == 403
     assert r.json()["error"]["code"] == "PREFIX_NOT_ALLOWED"
 
 
-def test_upload_mime_415(client, fake_driver, user_jwt):
-    r = _post(client, user_jwt(), "humans/abc/x.mp3", filename="a.mp3", content=b"aud", mime="audio/mpeg")
+def test_upload_new_prefix_writable(client, fake_driver, user_jwt):
+    # Denylist model: a brand-new folder needs no code change to accept uploads.
+    r = _post(client, user_jwt(), "brand-new-feature/x.png")
+    assert r.status_code == 201
+
+
+def test_upload_unlisted_mime_415(client, fake_driver, user_jwt):
+    r = _post(client, user_jwt(), "uploads/doc.pdf", filename="d.pdf", content=b"pdf", mime="application/pdf")
     assert r.status_code == 415
     assert r.json()["error"]["code"] == "UNSUPPORTED_MEDIA_TYPE"
 
 
-def test_upload_media_mixed_audio_ok(client, fake_driver, user_jwt):
-    # audio into a stages/ (media class) folder is allowed
+def test_upload_audio_any_folder_ok(client, fake_driver, user_jwt):
+    # Cap comes from the mime, not the folder — audio is fine anywhere writable.
     r = _post(client, user_jwt(), "stages/s1/sounds/clip.mp3", filename="c.mp3", content=b"aud", mime="audio/mpeg")
     assert r.status_code == 201
 

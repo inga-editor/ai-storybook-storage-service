@@ -21,23 +21,24 @@ def test_delete_twice_always_200(client, fake_driver):
     assert r2.status_code == 200 and r2.json()["data"]["deleted"] is False
 
 
-def test_delete_user_mode_system_prefix_403(client, fake_driver, user_jwt):
+def test_delete_user_mode_service_only_prefix_403(client, fake_driver, user_jwt):
     tok = user_jwt()
     r = client.delete(
-        f"/api/storage/objects/{BUCKET}/ai-logs/x.png",
+        f"/api/storage/objects/{BUCKET}/exports/x.pdf",
         headers={"Authorization": f"Bearer {tok}"},
     )
     assert r.status_code == 403
     assert r.json()["error"]["code"] == "PREFIX_NOT_ALLOWED"
 
 
-def test_delete_user_mode_allowed_prefix_200(client, fake_driver, user_jwt):
+def test_delete_user_mode_any_other_prefix_200(client, fake_driver, user_jwt):
     tok = user_jwt()
-    r = client.delete(
-        f"/api/storage/objects/{BUCKET}/humans/id/x.png",
-        headers={"Authorization": f"Bearer {tok}"},
-    )
-    assert r.status_code == 200
+    for key in ("humans/id/x.png", "ai-logs/x.png"):  # denylist: only service-only blocked
+        r = client.delete(
+            f"/api/storage/objects/{BUCKET}/{key}",
+            headers={"Authorization": f"Bearer {tok}"},
+        )
+        assert r.status_code == 200
 
 
 def test_delete_no_auth_401(client, fake_driver):

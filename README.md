@@ -25,7 +25,7 @@ Design SSOT: `ai-storybook-design/service/storage-service/` (00–06).
 | `PUT /api/storage/objects/{bucket}/{key:path}` | `X-API-Key` | S2S raw-bytes write (streaming, `?upsert=`) |
 | `DELETE /api/storage/objects/{bucket}/{key:path}` | `X-API-Key` **or** user JWT | best-effort delete (always 200) |
 | `HEAD /api/storage/objects/{bucket}/{key:path}` | `X-API-Key` | metadata via headers (ETag/Content-Length/Content-Type/Last-Modified) |
-| `POST /api/storage/uploads` | user JWT | browser multipart upload (FE-writable prefixes) |
+| `POST /api/storage/uploads` | user JWT | browser multipart upload (any prefix except `STORAGE_SERVICE_ONLY_PREFIXES`) |
 | `POST /api/storage/sign` | `X-API-Key` | mint a signed GET URL (private prefix) |
 | `GET /files-signed/{bucket}/{key:path}?exp&sig` | HMAC sig | verify → `X-Accel-Redirect` (nginx sendfile) |
 | `GET /healthz` | none | `{status, driver, disk_free_bytes, degraded}` |

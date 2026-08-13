@@ -1,91 +1,57 @@
-"""FE-writable prefix allowlist + media-class limits (design 04 §2).
+"""User-write prefix policy + mime-based size caps (design 04 §2, REV 260813).
 
-This is the SSOT that REPLACES the old Supabase RLS. It applies to the user-JWT
-mode only — S2S (X-API-Key) may write ANY prefix. A user write whose key matches no
-listed prefix -> 403 (this is a security IMPROVEMENT over the old RLS, which let any
-authenticated user INSERT anywhere in the bucket).
+DENYLIST model (replaces the launch allowlist — REV 260813, generic-storage
+decision): a user-JWT write/delete may target ANY prefix EXCEPT
+`STORAGE_SERVICE_ONLY_PREFIXES`. S2S (X-API-Key) is never restricted here.
+Rationale: a new FE feature folder must be an env/ops concern, not a code
+deploy; protection of service-written trees (exports/, AI outputs, ...) is
+config. Note the two prefix lists are ORTHOGONAL:
+  - STORAGE_PRIVATE_PREFIXES      -> READ privacy (signed GET only, nginx 403)
+  - STORAGE_SERVICE_ONLY_PREFIXES -> WRITE restriction (S2S only)
+`exports/` sits in both.
 
-── Provenance (grep of `ai-storybook-editor/src`, 2026-08-13) ──────────────────
-The design draft listed 6 prefixes; the real FE call sites use MORE, and two roots
-carry MIXED media. Verified upload sites:
-  uploads/        image   storage-api.ts defaultSupabaseImageUploader (default prefix)
-  humans/         image   human-api.ts .upload(humans/{id}/{uuid}.ext)
-  art-styles/     image   style-api.ts .upload(art-styles/{id}/{uuid}.ext)
-  characters/     media   characters variant-item (image) + entity sounds (audio)
-  props/          media   props variant-item (image) + props sound-item (audio)
-  stages/         media   stages variant-item (image) + stages sound-item (audio)
-  branch-images/  image   story-branching-modal
-  parametric/     image   use-parametric-value-upload (pathPrefix "parametric/img_N")
-  extract-results/ image  extract-image-modal-utils
-  extract-objects/ image  extract-image-modal-utils
-  auto-pics/      auto_pic use-auto-pic-upload (image webp + video webm)
-  audios/         audio    uploadAudioToStorage default prefix
-  audio-objects/  audio    edit-audio-modal
-  videos/         video    uploadVideoToStorage default prefix
-  video-objects/  video    objects-video-toolbar
+Mime/size for user uploads no longer derives from the key prefix: the cap
+comes from `STORAGE_USER_MIME_CAPS` (mime-prefix -> byte cap, longest match
+wins). FAIL-CLOSED — a declared mime with no matching entry -> 415, missing
+mime -> 415. This keeps text/html and image/svg+xml unservable from the
+public read domain unless ops explicitly opts in.
 
-DIVERGENCE FROM DESIGN (flag to sync into design 04 §2): the `media` class (image +
-audio) is NEW — the draft's per-prefix single class cannot express `stages/` and
-`props/` carrying BOTH variant images and sound clips (the entity id sits in a middle
-segment, so a static longest-prefix map cannot split them). Adding a new FE prefix =
-one entry here (additive).
+Since RLS is gone, the residual exposure is unchanged from launch: any
+authenticated user can overwrite any user-writable key (accepted in ADR-054
+§4 — no per-user scoping; uuid-carrying keys make accidental collision ~0).
 """
 
 from __future__ import annotations
 
+from src.config.settings import settings
 from src.core.errors import payload_too_large, prefix_not_allowed, unsupported_media_type
 
-FE_WRITABLE_PREFIXES: dict[str, str] = {  # prefix -> media_class
-    "uploads/": "image",
-    "humans/": "image",
-    "art-styles/": "image",
-    "characters/": "media",
-    "props/": "media",
-    "stages/": "media",
-    "branch-images/": "image",
-    "parametric/": "image",
-    "extract-results/": "image",
-    "extract-objects/": "image",
-    "auto-pics/": "auto_pic",
-    "audios/": "audio",
-    "audio-objects/": "audio",
-    "videos/": "video",
-    "video-objects/": "video",
-}
 
-MEDIA_CLASS_LIMITS: dict[str, dict] = {
-    "image": {"max_bytes": 10 * 1024**2, "allowed_mime_prefixes": ["image/"]},
-    "audio": {"max_bytes": 20 * 1024**2, "allowed_mime_prefixes": ["audio/"]},
-    "video": {"max_bytes": 50 * 1024**2, "allowed_mime_prefixes": ["video/"]},
-    "auto_pic": {"max_bytes": 50 * 1024**2, "allowed_mime_prefixes": ["image/", "video/"]},
-    # Mixed entity folders (stages/props/characters) — variant images + sound clips.
-    "media": {"max_bytes": 20 * 1024**2, "allowed_mime_prefixes": ["image/", "audio/"]},
-}
+def check_user_writable(key: str) -> None:
+    """Raise 403 when the key sits under a service-only prefix (user-JWT mode)."""
+    for prefix in settings.service_only_prefixes:
+        if key.startswith(prefix):
+            raise prefix_not_allowed()
 
 
-def resolve_fe_class(key: str) -> str | None:
-    """Longest matching FE-writable prefix -> media_class, or None if not writable."""
-    match: str | None = None
-    for prefix, media_class in FE_WRITABLE_PREFIXES.items():
-        if key.startswith(prefix) and (match is None or len(prefix) > len(match)):
-            match = prefix
-    return FE_WRITABLE_PREFIXES[match] if match else None
-
-
-def check_fe_writable(key: str) -> str:
-    """Return the media_class for a user-writable key, or raise 403."""
-    media_class = resolve_fe_class(key)
-    if media_class is None:
-        raise prefix_not_allowed()
-    return media_class
-
-
-def check_media_class(media_class: str, content_type: str | None, size: int | None) -> None:
-    """Enforce mime (415) + size (413) for the resolved class. `content_type`/`size`
-    may be None when unknown; mime None -> 415 (must be declared)."""
-    limits = MEDIA_CLASS_LIMITS[media_class]
+def resolve_user_cap(content_type: str | None) -> int:
+    """Byte cap for a user upload, from the longest matching mime-prefix entry.
+    Missing/unlisted mime -> 415 (fail-closed)."""
     ct = (content_type or "").split(";", 1)[0].strip().lower()
-    if not any(ct.startswith(p) for p in limits["allowed_mime_prefixes"]):
+    match: str | None = None
+    for mime_prefix in settings.user_mime_caps:
+        if ct.startswith(mime_prefix) and (match is None or len(mime_prefix) > len(match)):
+            match = mime_prefix
+    if not ct or match is None:
         raise unsupported_media_type()
-    if size is not None and size > limits["max_bytes"]:
+    return settings.user_mime_caps[match]
+
+
+def check_user_upload(key: str, content_type: str | None, size: int | None) -> int:
+    """Full user-upload gate: prefix (403) -> mime (415) -> declared size (413).
+    Returns the byte cap for the streaming counter."""
+    check_user_writable(key)
+    cap = resolve_user_cap(content_type)
+    if size is not None and size > cap:
         raise payload_too_large()
+    return cap
