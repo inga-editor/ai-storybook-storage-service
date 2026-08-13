@@ -15,7 +15,8 @@ Hardening:
 from __future__ import annotations
 
 import jwt
-from fastapi import Header
+from fastapi import Security
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from src.auth.jwks_cache import get_signing_key
 from src.auth.principal import Principal
@@ -32,14 +33,11 @@ _JWKS_ALGS = ["RS256", "ES256"]
 
 _warned_no_verifier = False
 
-
-def _bearer_token(authorization: str | None) -> str:
-    if not authorization:
-        raise unauthorized()
-    parts = authorization.split(" ", 1)
-    if len(parts) != 2 or parts[0].lower() != "bearer" or not parts[1].strip():
-        raise unauthorized()
-    return parts[1].strip()
+# Security scheme (not a plain Header param): OpenAPI ignores header parameters
+# named Authorization, so Swagger UI silently drops them — a scheme gets the
+# Authorize button instead. auto_error=False keeps every failure on our single
+# UNAUTHORIZED envelope (FastAPI's built-in error is a 403 with a different body).
+bearer_scheme = HTTPBearer(auto_error=False)
 
 
 async def _decode(token: str) -> dict:
@@ -70,10 +68,7 @@ async def _decode(token: str) -> dict:
     raise unauthorized()
 
 
-async def require_user_jwt(
-    authorization: str | None = Header(default=None, alias="Authorization"),
-) -> Principal:
-    token = _bearer_token(authorization)
+async def authenticate_token(token: str) -> Principal:
     try:
         claims = await _decode(token)
     except jwt.InvalidTokenError:
@@ -82,3 +77,12 @@ async def require_user_jwt(
     if not sub:
         raise unauthorized()
     return Principal("user", str(sub))
+
+
+async def require_user_jwt(
+    credentials: HTTPAuthorizationCredentials | None = Security(bearer_scheme),
+) -> Principal:
+    # Scheme check is defensive — HTTPBearer already yields None for non-Bearer.
+    if credentials is None or credentials.scheme.lower() != "bearer" or not credentials.credentials.strip():
+        raise unauthorized()
+    return await authenticate_token(credentials.credentials.strip())
