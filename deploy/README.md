@@ -12,7 +12,7 @@ storybook-storage.service`; don't `systemctl start` without a real `STORAGE_ROOT
 | `GET /files/…` | none | ✅ public (sendfile) |
 | `GET /files-signed/…` | HMAC sig | ✅ public (proxy → FastAPI verify) |
 | `POST /api/storage/uploads` | user JWT | ✅ public (proxy → 127.0.0.1:8200) |
-| `DELETE /api/storage/objects/…` (user) | user JWT | ✅ public (`limit_except DELETE`) |
+| `DELETE /api/storage/objects/…` (user) | user JWT | ✅ public (`limit_except DELETE OPTIONS` — OPTIONS = browser CORS preflight, answered by FastAPI) |
 | `PUT` / `HEAD /api/storage/objects/…`, `POST /api/storage/sign` | X-API-Key | ❌ **loopback-only** |
 | `GET /healthz` | none | ❌ loopback + internal monitor |
 

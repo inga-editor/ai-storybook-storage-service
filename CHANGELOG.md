@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+- **nginx: user DELETE was CORS-dead from the browser** (2026-08-14). `location ~ ^/api/storage/objects/` had `limit_except DELETE { deny all; }`, which also denied the browser's OPTIONS preflight at the edge — no `Access-Control-Allow-Origin` ever reached the client, so every editor-origin DELETE was CORS-blocked (uploads were unaffected: `location = /api/storage/uploads` proxies all methods). Fix: `limit_except DELETE OPTIONS` so the preflight reaches FastAPI's CORSMiddleware; PUT/HEAD remain edge-refused. **Live nginx must be updated by hand** — the conf is an artifact, not auto-deployed.
+
 ## [0.1.0] — 2026-08-13 — bootstrap
 
 Initial self-hosted storage service ([ADR-054](../docs/technical-decisions/adr-054-self-hosted-storage-service.md)),
