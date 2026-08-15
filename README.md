@@ -2,7 +2,7 @@
 
 Self-hosted blob storage replacing Supabase Storage ([ADR-054](../docs/technical-decisions/adr-054-self-hosted-storage-service.md)).
 FastAPI + a `BlobDriver` seam (local-fs v1). **No DB, no Supabase SDK, no AI** — the
-smallest sibling of `ai-storybook-image-api` / `ai-storybook-swap-service`. Port **8200**.
+smallest sibling of `ai-storybook-python-api` / `ai-storybook-swap-service`. Port **8200**.
 
 Design SSOT: `ai-storybook-design/service/storage-service/` (00–06).
 
