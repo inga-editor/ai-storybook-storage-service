@@ -45,3 +45,23 @@ def test_delete_no_auth_401(client, fake_driver):
     r = client.delete(f"/api/storage/objects/{BUCKET}/ai-logs/x.png")
     assert r.status_code == 401
     assert r.json()["error"]["code"] == "UNAUTHORIZED"
+
+
+def test_delete_sibling_rendition_key_service_accepted(client, fake_driver):
+    # ADR-057: S2S principal may delete a sibling rendition key.
+    key = "ai-logs/d.png@web.webp"
+    _put(client, key)
+    r = client.delete(f"/api/storage/objects/{BUCKET}/{key}", headers={"X-API-Key": "test-key"})
+    assert r.status_code == 200
+    assert r.json()["data"]["deleted"] is True
+
+
+def test_delete_sibling_rendition_key_user_rejected_400(client, fake_driver, user_jwt):
+    # ADR-057: user JWT principal must NOT be able to delete/craft a sibling key.
+    tok = user_jwt()
+    r = client.delete(
+        f"/api/storage/objects/{BUCKET}/ai-logs/d.png@web.webp",
+        headers={"Authorization": f"Bearer {tok}"},
+    )
+    assert r.status_code == 400
+    assert r.json()["error"]["code"] == "VALIDATION_ERROR"

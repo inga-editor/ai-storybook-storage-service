@@ -66,3 +66,10 @@ def test_uploader_metadata_wired(client, fake_driver):
     put_call = next(c for c in fake_driver.calls if c[0] == "put")
     metadata = put_call[5]
     assert metadata["uploader"] == "svc:image-api"
+
+
+def test_put_sibling_rendition_key_s2s_accepted(client, fake_driver):
+    # ADR-057: S2S may write sibling rendition key `{key}@{tier}.{rext}`.
+    r = _put(client, "uploads/images/a.png@web.webp", ct="image/webp")
+    assert r.status_code == 201
+    assert r.json()["data"]["key"] == "uploads/images/a.png@web.webp"

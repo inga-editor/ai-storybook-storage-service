@@ -19,7 +19,7 @@ async def create_signed_url(
     payload: SignRequest,
     _principal: Principal = Depends(require_api_key),
 ) -> dict:
-    key_grammar.validate(payload.bucket, payload.key)
+    key_grammar.validate(payload.bucket, payload.key, allow_at=True)
     signed_url = get_driver().presign_get(payload.bucket, payload.key, ttl_sec=payload.expires_in)
     expires_at = (datetime.now(timezone.utc) + timedelta(seconds=payload.expires_in)).isoformat()
     return {"success": True, "data": {"signed_url": signed_url, "expires_at": expires_at}}

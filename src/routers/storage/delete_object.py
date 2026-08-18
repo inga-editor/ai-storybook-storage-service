@@ -20,7 +20,9 @@ async def delete_object(
     key: str,
     principal: Principal = Depends(require_api_key_or_user_jwt),
 ) -> dict:
-    key_grammar.validate(bucket, key)
+    # Validate AFTER resolving principal: allow_at gates on who is calling —
+    # service may delete sibling rendition keys, user JWT may not (design 04 §3).
+    key_grammar.validate(bucket, key, allow_at=principal.kind == "service")
     if principal.kind == "user":
         check_user_writable(key)  # 403 on service-only prefixes
     deleted = await get_driver().delete(bucket, key)

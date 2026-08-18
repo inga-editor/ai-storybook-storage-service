@@ -32,3 +32,11 @@ def test_head_missing_404(client, fake_driver):
 def test_head_no_auth_401(client, fake_driver):
     r = client.head(f"/api/storage/objects/{BUCKET}/ai-logs/x.png")
     assert r.status_code == 401
+
+
+def test_head_sibling_rendition_key_s2s_accepted(client, fake_driver):
+    # ADR-057: S2S HEAD on a sibling rendition key must pass grammar (not 400).
+    key = "uploads/images/a.png@web.webp"
+    _put(client, key)
+    r = client.head(f"/api/storage/objects/{BUCKET}/{key}", headers={"X-API-Key": "test-key"})
+    assert r.status_code == 200

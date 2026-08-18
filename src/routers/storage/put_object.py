@@ -25,7 +25,7 @@ async def put_object(
     upsert: bool = Query(default=False),
     principal: Principal = Depends(require_api_key),
 ) -> JSONResponse:
-    key_grammar.validate(bucket, key)
+    key_grammar.validate(bucket, key, allow_at=True)
 
     content_type = request.headers.get("content-type")
     if not content_type:

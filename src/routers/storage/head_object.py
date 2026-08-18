@@ -23,7 +23,7 @@ async def head_object(
     key: str,
     _principal: Principal = Depends(require_api_key),
 ) -> Response:
-    key_grammar.validate(bucket, key)
+    key_grammar.validate(bucket, key, allow_at=True)
     info = await get_driver().head(bucket, key)
     if info is None:
         raise not_found()

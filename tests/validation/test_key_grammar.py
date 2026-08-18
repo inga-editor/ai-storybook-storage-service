@@ -64,3 +64,39 @@ def test_full_validate():
     key_grammar.validate(BUCKET, "humans/x/y.png")
     with pytest.raises(ServiceError):
         key_grammar.validate("wrong", "humans/x/y.png")
+
+
+# --- @ grammar (ADR-057, S2S-only sibling rendition key) --------------------
+
+
+def test_at_rejected_by_default():
+    with pytest.raises(ServiceError) as ei:
+        key_grammar.validate_key("uploads/images/a.png@web.webp")
+    assert ei.value.code == "VALIDATION_ERROR"
+
+
+def test_at_accepted_when_allow_at():
+    key_grammar.validate_key("uploads/images/a.png@web.webp", allow_at=True)  # no raise
+
+
+def test_at_extension_resolves_to_rendition_ext():
+    # "abc.png@web.webp" -> last segment's extension is "webp", not "png".
+    key_grammar.validate_key("abc.png@web.webp", allow_at=True)
+
+
+def test_multi_at_in_segment_valid():
+    # Charset-based rule — no reason to special-case a second "@".
+    key_grammar.validate_key("abc.png@web@extra.webp", allow_at=True)
+
+
+def test_at_still_rejects_other_violations():
+    with pytest.raises(ServiceError):
+        key_grammar.validate_key("a/../b.png@web.webp", allow_at=True)  # traversal
+    with pytest.raises(ServiceError):
+        key_grammar.validate_key("noext@web", allow_at=True)  # missing extension
+
+
+def test_full_validate_allow_at_forwarded():
+    key_grammar.validate(BUCKET, "uploads/images/a.png@web.webp", allow_at=True)
+    with pytest.raises(ServiceError):
+        key_grammar.validate(BUCKET, "uploads/images/a.png@web.webp")  # default False

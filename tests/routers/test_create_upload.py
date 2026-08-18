@@ -55,3 +55,11 @@ def test_upload_uploader_tag(client, fake_driver, user_jwt):
     _post(client, user_jwt(sub="user-xyz"), "humans/abc/uuid.png")
     put_call = next(c for c in fake_driver.calls if c[0] == "put")
     assert put_call[5]["uploader"] == "user:user-xyz"
+
+
+def test_upload_at_key_rejected_400(client, fake_driver, user_jwt):
+    # ADR-057: user JWT upload must NOT accept "@" — blocks client-crafted
+    # rendition-suffix keys (`foo@web.webp`) that would collide with S2S siblings.
+    r = _post(client, user_jwt(), "uploads/images/a.png@web.webp")
+    assert r.status_code == 400
+    assert r.json()["error"]["code"] == "VALIDATION_ERROR"
