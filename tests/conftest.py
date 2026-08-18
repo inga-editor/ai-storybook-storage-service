@@ -20,6 +20,7 @@ os.environ.setdefault("SUPABASE_URL", "")
 # pydantic-settings) must not leak its tuned values into assertions.
 os.environ.setdefault("STORAGE_SERVICE_ONLY_PREFIXES", "exports/")
 os.environ.setdefault("STORAGE_USER_MIME_CAPS", '{"image/": 10485760, "audio/": 20971520, "video/": 52428800}')
+os.environ.setdefault("STORAGE_SIGNED_GET_DEV_STREAM", "false")
 
 import asyncio  # noqa: E402
 import time  # noqa: E402

@@ -1,0 +1,23 @@
+# Prod compose — run from repo root:
+#   TAG=<sha> STORAGE_UID=<uid> STORAGE_GID=<gid> docker compose -f deploy/compose.yml up -d
+# (deploy/deploy.sh derives STORAGE_UID/GID from the owner of STORAGE_ROOT via stat.)
+#
+# network_mode: host — uvicorn binds 127.0.0.1:8200 exactly like the script-run setup;
+# the loopback S2S boundary (ADR-054) is unchanged and nginx proxy targets stay put.
+# user: — blobs are written with the same uid/gid that owns STORAGE_ROOT on the host,
+# so nginx sendfile and the manual script-run fallback keep working on the same files.
+# Container is stateless: blobs + .env live on the host, logs go to host journald.
+services:
+  storage-service:
+    image: storage-service:${TAG:?set TAG to the image tag to run}
+    container_name: storage-service
+    network_mode: host
+    restart: unless-stopped
+    user: "${STORAGE_UID:?run via deploy.sh or export owner uid of STORAGE_ROOT}:${STORAGE_GID:?}"
+    env_file: /home/tbng84/Projects/AI-Story-Book/ai-storybook-storage-service/.env
+    volumes:
+      - /media/data/storybook-storage:/media/data/storybook-storage
+    logging:
+      driver: journald
+      options:
+        tag: storage-service
