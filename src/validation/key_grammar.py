@@ -4,7 +4,7 @@ client-safe message that names the rule, never echoing the full key into logs.
 
 Rules:
   charset per segment : [A-Za-z0-9._-]  (S2S mode adds "@" — sibling rendition
-                         key `{key}@{tier}.{rext}`, ADR-057 REV 260818. User JWT
+                         key `{key}@{quality}.{rext}`, ADR-057 REV 260819. User JWT
                          mode keeps rejecting "@" — see design 04 §3.)
   forbidden           : "..", empty segment ("//"), leading "/", "\\", control chars, "%"
   length              : key <= 1024, each segment <= 255
@@ -35,7 +35,7 @@ def validate_bucket(bucket: str) -> None:
 
 def validate_key(key: str, *, allow_at: bool = False) -> None:
     """`allow_at=True` (S2S write paths only) permits `@` in segment charset —
-    sibling rendition key `{key}@{tier}.{rext}` (design 04 §3, ADR-057). User JWT
+    sibling rendition key `{key}@{quality}.{rext}` (design 04 §3, ADR-057). User JWT
     paths must call with the default `allow_at=False`.
     """
     if not key or len(key) > MAX_KEY_LEN:
